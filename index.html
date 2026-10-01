@@ -346,7 +346,7 @@ body {
         conversationTimers.push(setTimeout(() => {
           setSpeech("still curious about human intelligence?");
           instructionReady = true;
-          showRepeatMenu(lastOccupiedCorner);
+          showRepeatMenu();
         }, 2000));
       }, 2000));
     }
@@ -404,7 +404,15 @@ body {
     el.classList.add("visible");
   }
 
-  function showRepeatMenu(firstCorner) {
+  function showRepeatMenu() {
+    /*
+      Recompute the ball's position relative to the invisible box NOW.
+      The nearest corner is treated as the ball's current corner, and the
+      other three corners receive yes / no / maybe.
+    */
+    const current = nearestCorner(center.x, center.y);
+    const firstCorner = current ? current.index : 0;
+
     menuActive = true;
     cornerPromptActive = false;
     occupiedCorner = firstCorner;
