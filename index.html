@@ -1,0 +1,588 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pilemma</title>
+<meta name="theme-color" content="#fffdf8">
+<style>
+:root {
+  --paper:#fffdf8;
+  --ink:#171512;
+  --accent:#8f3fb0;
+  --choice:#55514c;
+  --muted:#81786e;
+}
+
+* { box-sizing:border-box; }
+
+html, body {
+  margin:0;
+  min-height:100%;
+  background:var(--paper);
+}
+
+body {
+  min-height:100svh;
+  display:grid;
+  place-items:center;
+  overflow:hidden;
+}
+
+.doorway {
+  width:min(92vw, 920px);
+  text-align:center;
+}
+
+.stage {
+  position:relative;
+  width:100%;
+  aspect-ratio: 3.1 / 1;
+  min-height:220px;
+  max-height:320px;
+}
+
+.logo {
+  position:absolute;
+  left:50%;
+  top:48%;
+  width:82%;
+  transform:translate(-50%,-50%);
+  pointer-events:none;
+}
+
+.logo svg {
+  display:block;
+  width:100%;
+  height:auto;
+  fill:var(--ink);
+}
+
+/* A large invisible draggable target. */
+.portal {
+  position:absolute;
+  width:48px;
+  height:48px;
+  margin:-24px 0 0 -24px;
+  border:0;
+  padding:0;
+  background:transparent;
+  border-radius:50%;
+  cursor:grab;
+  touch-action:none;
+  z-index:10;
+  -webkit-tap-highlight-color:transparent;
+}
+
+.portal.dragging {
+  cursor:grabbing;
+}
+
+/* Only this is visible; its size is set from logo width in JS. */
+.ball {
+  position:absolute;
+  left:50%;
+  top:50%;
+  width:12px;
+  height:12px;
+  transform:translate(-50%,-50%);
+  border-radius:50%;
+  background:var(--accent);
+  pointer-events:none;
+  transition:box-shadow .15s ease;
+}
+
+.portal.dragging .ball {
+  box-shadow:0 4px 10px rgba(143,63,176,.22);
+}
+
+.speech {
+  position:absolute;
+  z-index:8;
+  max-width:min(270px,70vw);
+  color:#171512;
+  font:400 14px/1.35 ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  text-align:left;
+  pointer-events:none;
+  transition:opacity .18s ease;
+}
+
+.corner-label {
+  position:absolute;
+  color:var(--choice);
+  font:400 14px/1.2 ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  letter-spacing:.01em;
+  pointer-events:none;
+  opacity:0;
+  transition:opacity .18s ease;
+  white-space:nowrap;
+}
+
+.corner-label.visible {
+  opacity:1;
+}
+
+.construction {
+  margin-top:2px;
+  color:var(--muted);
+  font:400 12px/1.4 ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  letter-spacing:.14em;
+}
+
+@media(max-width:640px) {
+  .doorway { width:96vw; }
+  .stage { min-height:210px; }
+  .speech { font-size:13px; }
+  .corner-label { font-size:13px; }
+}
+</style>
+</head>
+<body>
+
+<main class="doorway">
+  <div class="stage" id="stage">
+
+    <div class="logo" id="logo">
+      <svg id="wordmark" viewBox="0 0 900 210" role="img" aria-label="pilemma">
+        <path d="M200.711 149.974Q203.73700000000002 149.974 207.38600000000002 148.372Q211.03500000000003 146.77 214.86200000000002 143.388Q218.68900000000002 140.006 221.27 133.50900000000001Q223.851 127.012 223.851 118.646Q223.851 109.03399999999999 221.27 102.27Q218.68900000000002 95.506 214.50600000000003 92.569Q210.32300000000004 89.632 206.76300000000003 88.475Q203.20300000000003 87.318 199.64300000000003 87.318Q191.09900000000002 87.318 184.33500000000004 92.48Q180.241 95.506 179.70700000000002 105.118Q179.70700000000002 106.542 179.61800000000002 110.369Q179.52900000000002 114.196 179.52900000000002 116.51Q179.52900000000002 125.054 179.88500000000002 132.53Q180.419 141.964 184.157 145.524Q188.96300000000002 149.974 200.711 149.974Z"/><path d="M167.06900000000002 192.16V101.914Q167.06900000000002 98.888 164.93300000000002 94.349Q162.79700000000003 89.81 158.88100000000003 88.92Q157.45700000000002 88.56400000000001 157.45700000000002 86.60600000000001Q157.45700000000002 84.82600000000001 158.70300000000003 84.47Q166.17900000000003 82.69 179.35100000000003 77.35000000000001L179.52900000000002 77.172H179.70700000000002Q180.77500000000003 77.172 180.77500000000003 78.774Q180.77500000000003 79.664 180.33000000000004 83.75800000000001Q179.88500000000002 87.852 179.88500000000002 89.45400000000001Q179.88500000000002 90.878 180.06300000000002 91.05600000000001Q183.44500000000002 87.674 192.43400000000003 83.49100000000001Q201.423 79.308 208.899 79.308Q222.07100000000003 79.308 230.08100000000002 89.45400000000001Q238.091 99.6 238.091 112.95Q238.091 129.326 226.25400000000002 142.409Q214.41700000000003 155.492 198.04100000000003 155.492Q194.12500000000003 155.492 188.42900000000003 153.801Q182.733 152.11 180.241 149.796Q179.52900000000002 149.796 179.52900000000002 158.874V192.16Q179.52900000000002 193.584 180.15200000000004 194.563Q180.77500000000003 195.542 182.199 196.34300000000002Q183.62300000000002 197.144 184.60200000000003 197.5Q185.58100000000002 197.856 187.53900000000002 198.301Q189.497 198.74599999999998 189.853 198.924Q193.947 200.348 193.947 202.128Q193.947 203.73 190.031 203.73Q186.471 203.73 181.39800000000002 203.285Q176.32500000000002 202.84 173.29900000000004 202.84Q170.27300000000002 202.84 166.44600000000003 203.285Q162.61900000000003 203.73 159.05900000000003 203.73Q155.32100000000003 203.73 155.32100000000003 202.128Q155.32100000000003 200.348 159.41500000000002 198.924Q165.28900000000002 197.144 166.53500000000003 195.00799999999998Q167.06900000000002 193.762 167.06900000000002 192.16Z"/><path d="M273.15700000000004 75.748Q274.403 75.748 274.403 76.638Q272.80100000000004 93.01400000000001 272.80100000000004 100.668V141.964Q272.80100000000004 143.744 273.33500000000004 144.901Q273.869 146.058 275.471 146.85899999999998Q277.07300000000004 147.66 277.607 147.838Q278.141 148.016 280.45500000000004 148.728Q284.54900000000004 150.152 284.54900000000004 151.932Q284.54900000000004 153.534 280.98900000000003 153.534Q277.607 153.534 273.60200000000003 153.089Q269.59700000000004 152.644 266.571 152.644Q263.545 152.644 259.629 153.089Q255.71300000000002 153.534 252.15300000000002 153.534Q248.59300000000002 153.534 248.59300000000002 151.932Q248.59300000000002 150.152 252.687 148.728Q258.56100000000004 146.948 259.807 144.812Q260.341 143.566 260.341 141.964V103.338Q260.341 92.124 251.97500000000002 90.344Q250.55100000000002 89.988 250.55100000000002 88.03Q250.55100000000002 86.25 251.79700000000003 85.894Q256.959 84.648 262.03200000000004 82.06700000000001Q267.105 79.486 269.95300000000003 77.617Q272.80100000000004 75.748 273.15700000000004 75.748Z"/><path d="M315.521 141.964Q315.521 143.744 316.05500000000006 144.901Q316.58900000000006 146.058 318.19100000000003 146.85899999999998Q319.79300000000006 147.66 320.32700000000006 147.838Q320.86100000000005 148.016 323.17500000000007 148.728Q327.26900000000006 150.152 327.26900000000006 151.932Q327.26900000000006 153.534 323.70900000000006 153.534Q320.14900000000006 153.534 316.23300000000006 153.089Q312.31700000000006 152.644 309.29100000000005 152.644Q306.26500000000004 152.644 302.34900000000005 153.089Q298.43300000000005 153.534 294.87300000000005 153.534Q291.31300000000005 153.534 291.31300000000005 151.932Q291.31300000000005 150.152 295.40700000000004 148.728Q301.28100000000006 146.948 302.52700000000004 144.812Q303.06100000000004 143.566 303.06100000000004 141.964V52.25200000000001Q303.06100000000004 41.03800000000001 294.87300000000005 39.25800000000001Q293.449 38.902 293.449 36.944Q293.449 35.164 294.69500000000005 34.80800000000001Q299.14500000000004 33.74000000000001 315.343 27.688000000000002H315.521L315.699 27.510000000000005Q316.76700000000005 27.510000000000005 316.76700000000005 28.756Q316.76700000000005 29.290000000000006 316.41100000000006 32.04900000000001Q316.05500000000006 34.80800000000001 315.788 40.32600000000001Q315.521 45.84400000000001 315.521 52.964Z"/><path d="M368.565 84.82600000000001Q361.623 84.82600000000001 356.01599999999996 89.899Q350.409 94.97200000000001 350.409 99.066Q350.409 101.736 353.791 101.736H368.387Q376.753 101.736 381.38100000000003 100.846Q383.161 100.668 383.161 95.862Q383.161 90.878 378.711 87.852Q374.261 84.82600000000001 368.565 84.82600000000001Z"/><path d="M371.413 79.308Q382.093 79.308 388.41200000000003 84.47Q394.731 89.632 394.731 99.244Q394.731 107.254 388.501 107.254H351.47700000000003Q348.985 107.254 348.006 108.411Q347.027 109.56800000000001 347.027 113.84Q347.027 126.3 354.68100000000004 135.556Q362.33500000000004 144.812 373.90500000000003 144.812Q377.999 144.812 382.894 142.854Q387.789 140.89600000000002 390.993 136.802Q392.23900000000003 135.556 392.951 135.556Q394.909 135.556 394.019 139.116Q392.41700000000003 144.812 384.76300000000003 150.152Q377.10900000000004 155.492 365.895 155.492Q353.435 155.492 344.71299999999997 144.812Q335.991 134.132 335.991 116.866Q335.991 101.55799999999999 346.226 90.43299999999999Q356.461 79.308 371.413 79.308Z"/><path d="M522.713 141.964Q522.713 143.744 523.2470000000001 144.901Q523.7810000000001 146.058 525.383 146.85899999999998Q526.985 147.66 527.519 147.838Q528.053 148.016 530.367 148.728Q534.461 150.152 534.461 151.932Q534.461 153.534 530.9010000000001 153.534Q527.163 153.534 523.514 153.089Q519.865 152.644 516.8389999999999 152.644Q513.813 152.644 509.808 153.089Q505.803 153.534 502.06500000000005 153.534Q498.505 153.534 498.505 151.932Q498.505 150.152 502.59900000000005 148.728Q508.473 146.948 509.71900000000005 144.812Q510.25300000000004 143.566 510.25300000000004 141.964V104.584Q510.25300000000004 97.998 505.981 92.83600000000001Q501.709 87.674 496.01300000000003 87.674Q486.579 87.674 480.52700000000004 92.48Q475.543 96.218 475.543 105.29599999999999V141.964Q475.543 142.676 475.632 143.38799999999998Q475.721 144.1 476.166 144.63400000000001Q476.611 145.168 476.789 145.613Q476.96700000000004 146.058 477.67900000000003 146.414Q478.391 146.77 478.658 147.037Q478.925 147.304 479.904 147.571Q480.88300000000004 147.838 481.06100000000004 147.927Q481.23900000000003 148.016 482.307 148.372Q483.375 148.728 483.553 148.728Q487.64700000000005 150.152 487.64700000000005 151.932Q487.64700000000005 153.534 484.087 153.534Q480.34900000000005 153.534 476.43300000000005 153.089Q472.51700000000005 152.644 469.49100000000004 152.644Q466.46500000000003 152.644 462.46000000000004 153.089Q458.45500000000004 153.534 454.71700000000004 153.534Q451.15700000000004 153.534 451.15700000000004 151.932Q451.15700000000004 150.152 455.25100000000003 148.728Q461.125 146.948 462.37100000000004 144.812Q463.083 143.744 463.083 141.964V104.584Q463.083 97.998 458.81100000000004 92.83600000000001Q454.53900000000004 87.674 448.843 87.674Q439.40900000000005 87.674 433.357 92.48Q428.55100000000004 96.04 428.55100000000004 105.29599999999999V141.964Q428.55100000000004 143.744 429.08500000000004 144.901Q429.619 146.058 431.221 146.85899999999998Q432.82300000000004 147.66 433.357 147.838Q433.891 148.016 436.20500000000004 148.728Q440.29900000000004 150.152 440.29900000000004 151.932Q440.29900000000004 153.534 436.73900000000003 153.534Q433.00100000000003 153.534 429.17400000000004 153.089Q425.34700000000004 152.644 422.321 152.644Q419.295 152.644 415.468 153.089Q411.641 153.534 407.903 153.534Q404.343 153.534 404.343 151.932Q404.343 150.152 408.437 148.728Q414.31100000000004 146.948 415.557 144.812Q416.091 143.566 416.091 141.964V103.694Q416.091 98.176 414.66700000000003 94.97200000000001Q413.24300000000005 91.768 409.149 90.878Q407.725 90.522 407.725 88.56400000000001Q407.725 86.784 408.971 86.428Q411.285 85.894 413.332 85.182Q415.379 84.47 416.803 83.84700000000001Q418.22700000000003 83.224 420.18500000000006 82.06700000000001Q422.14300000000003 80.91 422.944 80.376Q423.745 79.842 425.88100000000003 78.32900000000001Q428.01700000000005 76.816 428.72900000000004 76.46000000000001Q429.975 76.46000000000001 429.975 77.706Q429.975 78.24000000000001 429.53000000000003 82.69Q429.08500000000004 87.14 429.08500000000004 89.09800000000001Q429.08500000000004 90.878 429.44100000000003 91.23400000000001Q442.257 79.308 457.56500000000005 79.308Q469.49100000000004 79.308 474.119 89.988Q474.653 91.412 475.276 91.679Q475.899 91.946 476.70000000000005 91.412Q477.50100000000003 90.878 479.281 89.27600000000001Q490.139 79.308 504.913 79.308Q513.101 79.308 517.9069999999999 86.695Q522.713 94.082 522.713 104.05000000000001Z"/><path d="M661.1970000000001 141.964Q661.1970000000001 143.744 661.7310000000001 144.901Q662.2650000000001 146.058 663.8670000000001 146.85899999999998Q665.469 147.66 666.003 147.838Q666.537 148.016 668.8510000000001 148.728Q672.945 150.152 672.945 151.932Q672.945 153.534 669.385 153.534Q665.647 153.534 661.998 153.089Q658.349 152.644 655.3230000000001 152.644Q652.297 152.644 648.292 153.089Q644.287 153.534 640.5490000000001 153.534Q636.989 153.534 636.989 151.932Q636.989 150.152 641.0830000000001 148.728Q646.9570000000001 146.948 648.2030000000001 144.812Q648.7370000000001 143.566 648.7370000000001 141.964V104.584Q648.7370000000001 97.998 644.4650000000001 92.83600000000001Q640.1930000000001 87.674 634.4970000000001 87.674Q625.0630000000001 87.674 619.0110000000001 92.48Q614.027 96.218 614.027 105.29599999999999V141.964Q614.027 142.676 614.116 143.38799999999998Q614.205 144.1 614.6500000000001 144.63400000000001Q615.095 145.168 615.273 145.613Q615.451 146.058 616.163 146.414Q616.875 146.77 617.142 147.037Q617.4090000000001 147.304 618.3880000000001 147.571Q619.3670000000001 147.838 619.5450000000001 147.927Q619.7230000000001 148.016 620.791 148.372Q621.859 148.728 622.037 148.728Q626.1310000000001 150.152 626.1310000000001 151.932Q626.1310000000001 153.534 622.571 153.534Q618.8330000000001 153.534 614.9170000000001 153.089Q611.0010000000001 152.644 607.9750000000001 152.644Q604.9490000000001 152.644 600.9440000000001 153.089Q596.9390000000001 153.534 593.201 153.534Q589.6410000000001 153.534 589.6410000000001 151.932Q589.6410000000001 150.152 593.735 148.728Q599.609 146.948 600.855 144.812Q601.567 143.744 601.567 141.964V104.584Q601.567 97.998 597.2950000000001 92.83600000000001Q593.023 87.674 587.3270000000001 87.674Q577.893 87.674 571.8410000000001 92.48Q567.0350000000001 96.04 567.0350000000001 105.29599999999999V141.964Q567.0350000000001 143.744 567.5690000000001 144.901Q568.1030000000001 146.058 569.705 146.85899999999998Q571.307 147.66 571.8410000000001 147.838Q572.3750000000001 148.016 574.6890000000001 148.728Q578.783 150.152 578.783 151.932Q578.783 153.534 575.2230000000001 153.534Q571.485 153.534 567.658 153.089Q563.831 152.644 560.8050000000001 152.644Q557.7790000000001 152.644 553.9520000000001 153.089Q550.1250000000001 153.534 546.3870000000001 153.534Q542.8270000000001 153.534 542.8270000000001 151.932Q542.8270000000001 150.152 546.921 148.728Q552.7950000000001 146.948 554.041 144.812Q554.575 143.566 554.575 141.964V103.694Q554.575 98.176 553.1510000000001 94.97200000000001Q551.7270000000001 91.768 547.633 90.878Q546.2090000000001 90.522 546.2090000000001 88.56400000000001Q546.2090000000001 86.784 547.455 86.428Q549.769 85.894 551.816 85.182Q553.863 84.47 555.287 83.84700000000001Q556.711 83.224 558.6690000000001 82.06700000000001Q560.6270000000001 80.91 561.4280000000001 80.376Q562.229 79.842 564.365 78.32900000000001Q566.5010000000001 76.816 567.2130000000001 76.46000000000001Q568.4590000000001 76.46000000000001 568.4590000000001 77.706Q568.4590000000001 78.24000000000001 568.0140000000001 82.69Q567.5690000000001 87.14 567.5690000000001 89.09800000000001Q567.5690000000001 90.878 567.9250000000001 91.23400000000001Q580.7410000000001 79.308 596.0490000000001 79.308Q607.975 79.308 612.6030000000001 89.988Q613.1370000000001 91.412 613.76 91.679Q614.383 91.946 615.184 91.412Q615.985 90.878 617.7650000000001 89.27600000000001Q628.623 79.308 643.397 79.308Q651.585 79.308 656.3910000000001 86.695Q661.1970000000001 94.082 661.1970000000001 104.05000000000001Z"/><path d="M737.915 147.304Q742.365 147.304 745.035 144.812Q745.747 144.1 746.815 144.723Q747.883 145.346 747.883 146.414Q747.883 148.016 742.988 151.754Q738.093 155.492 733.643 155.492Q729.193 155.492 726.256 153.178Q723.319 150.864 722.073 148.55Q720.827 146.236 720.471 146.236Q719.759 146.236 717.267 148.55Q714.775 150.864 709.88 153.178Q704.985 155.492 698.577 155.492Q693.059 155.492 688.164 151.042Q683.269 146.592 683.269 141.43Q683.269 130.75 696.263 125.41L714.419 117.934Q717.8009999999999 116.51 718.5129999999999 115.44200000000001Q719.225 114.374 719.403 110.814L719.759 99.422Q719.937 94.79400000000001 716.9110000000001 91.412Q713.885 88.03 709.257 88.03Q706.231 88.03 702.8489999999999 89.899Q699.467 91.768 698.399 93.726Q697.687 94.97200000000001 697.687 97.108Q697.687 97.464 697.7760000000001 98.354Q697.865 99.244 697.865 99.6Q697.865 101.202 692.7919999999999 103.516Q687.7189999999999 105.83000000000001 685.583 105.83000000000001Q684.159 105.83000000000001 684.159 104.22800000000001Q684.159 98.176 691.279 91.946Q696.441 87.318 703.917 83.313Q711.393 79.308 717.8009999999999 79.308Q724.031 79.308 728.3029999999999 83.936Q732.5749999999999 88.56400000000001 732.3969999999999 95.15L731.507 133.598Q731.507 147.304 737.915 147.304Z"/><path d="M697.509 137.514Q697.509 142.142 700.357 144.723Q703.205 147.304 706.231 147.304Q711.393 147.304 716.911 142.498Q718.869 140.89600000000002 719.047 135.378L719.403 126.656Q719.581 122.918 717.8009999999999 122.918Q716.555 122.918 715.309 123.452Q697.509 129.504 697.509 137.514Z"/>
+      </svg>
+    </div>
+
+    <div class="speech" id="speech" aria-live="polite">hi!</div>
+
+    <button class="portal" id="portal" type="button" aria-label="Move the dot">
+      <span class="ball" id="ball" aria-hidden="true"></span>
+    </button>
+
+    <span class="corner-label" id="label-0"></span>
+    <span class="corner-label" id="label-1"></span>
+    <span class="corner-label" id="label-2"></span>
+  </div>
+
+  <div class="construction">under construction</div>
+</main>
+
+<script>
+(() => {
+  const stage = document.getElementById("stage");
+  const logo = document.getElementById("logo");
+  const portal = document.getElementById("portal");
+  const ball = document.getElementById("ball");
+  const speech = document.getElementById("speech");
+  const labels = [
+    document.getElementById("label-0"),
+    document.getElementById("label-1"),
+    document.getElementById("label-2")
+  ];
+
+  const logoDot = {
+    x: 29.45088889 / 100,
+    y: 24.92428571 / 100
+  };
+
+  const destinations = {
+    yes: "https://hi.pilemma.org/",
+    no: "https://en.wikipedia.org/wiki/Animal_cognition",
+    maybe: "https://en.wikipedia.org/wiki/Human_intelligence"
+  };
+
+  let center = { x:0, y:0 };
+  let pointerId = null;
+  let down = null;
+  let start = null;
+  let moved = false;
+  let instructionReady = false;
+  let menuActive = false;
+  let occupiedCorner = null;
+  let choicesByCorner = {};
+
+  let homeCenter = { x:0, y:0 };
+  let waitingForRestart = false;
+  let conversationTimers = [];
+  let cornerPromptActive = false;
+  let movedSinceCornerPrompt = false;
+
+  let conversationCount = 0;
+  let lastOccupiedCorner = 0;
+
+  function stageRect() {
+    return stage.getBoundingClientRect();
+  }
+
+  function corners() {
+    const r = stageRect();
+    const insetX = Math.max(34, r.width * .065);
+    const insetY = Math.max(30, r.height * .12);
+
+    return [
+      { x:insetX,           y:insetY },            // TL
+      { x:r.width-insetX,   y:insetY },            // TR
+      { x:r.width-insetX,   y:r.height-insetY },   // BR
+      { x:insetX,           y:r.height-insetY }    // BL
+    ];
+  }
+
+  function setCenter(x, y) {
+    center.x = x;
+    center.y = y;
+    portal.style.left = x + "px";
+    portal.style.top = y + "px";
+
+    // Intro lines travel with the little ball.
+    // Once the corner question appears, it stays where it first appeared.
+    if (!menuActive) {
+      placeSpeech();
+    }
+  }
+
+  function initialCenter() {
+    const sr = stageRect();
+    const lr = logo.getBoundingClientRect();
+
+    const x = (lr.left - sr.left) + lr.width * logoDot.x;
+    const y = (lr.top - sr.top) + lr.height * logoDot.y;
+
+    homeCenter = { x, y };
+    setCenter(x, y);
+
+    /*
+      Visible ball scales with the actual logo width, rather than viewport.
+      It remains small visually; the 48px parent is the invisible hit area.
+    */
+    const visible = Math.max(10, Math.min(16, lr.width * .019));
+    ball.style.width = visible + "px";
+    ball.style.height = visible + "px";
+  }
+
+  function placeSpeech() {
+    const sr = stageRect();
+    const sw = speech.offsetWidth || 150;
+    const sh = speech.offsetHeight || 20;
+
+    let x = center.x - sw - 13;
+    let y = center.y - sh - 11;
+
+    x = Math.max(8, Math.min(sr.width - sw - 8, x));
+    y = Math.max(8, Math.min(sr.height - sh - 8, y));
+
+    speech.style.left = x + "px";
+    speech.style.top = y + "px";
+  }
+
+  function setSpeech(text) {
+    speech.textContent = text;
+    requestAnimationFrame(placeSpeech);
+  }
+
+  function nearestCorner(x, y) {
+    const cs = corners();
+    let best = null;
+
+    cs.forEach((c, i) => {
+      const d = Math.hypot(x-c.x, y-c.y);
+      if (!best || d < best.distance) {
+        best = { index:i, corner:c, distance:d };
+      }
+    });
+
+    return best;
+  }
+
+  function snapThreshold() {
+    const r = stageRect();
+    return Math.max(42, Math.min(66, r.width * .075));
+  }
+
+  function hideLabels() {
+    labels.forEach(el => {
+      el.classList.remove("visible");
+      el.textContent = "";
+    });
+  }
+
+  function clearConversationTimers() {
+    conversationTimers.forEach(id => clearTimeout(id));
+    conversationTimers = [];
+    cornerPromptActive = false;
+    movedSinceCornerPrompt = false;
+  }
+
+  function startConversation() {
+    clearConversationTimers();
+
+    waitingForRestart = false;
+    instructionReady = false;
+    speech.style.opacity = "1";
+    conversationCount += 1;
+
+    setSpeech("hi!");
+
+    if (conversationCount === 1) {
+      /*
+        First visit: teach the corner behavior.
+      */
+      conversationTimers.push(setTimeout(() => {
+        setSpeech("i love the corners.");
+
+        conversationTimers.push(setTimeout(() => {
+          setSpeech("they're very cozy!");
+
+          conversationTimers.push(setTimeout(() => {
+            setSpeech("could you bring me there?");
+            instructionReady = true;
+            cornerPromptActive = true;
+            movedSinceCornerPrompt = false;
+          }, 4000));
+        }, 3000));
+      }, 2000));
+
+    } else {
+      /*
+        Returning visits: acknowledge the return, then ask again.
+      */
+      conversationTimers.push(setTimeout(() => {
+        setSpeech("welcome back.");
+
+        conversationTimers.push(setTimeout(() => {
+          setSpeech("still curious about human intelligence?");
+          instructionReady = true;
+          showRepeatMenu(lastOccupiedCorner);
+        }, 2000));
+      }, 2000));
+    }
+  }
+
+  function resetAtHome() {
+    clearConversationTimers();
+
+    menuActive = false;
+    cornerPromptActive = false;
+    movedSinceCornerPrompt = false;
+    occupiedCorner = null;
+    choicesByCorner = {};
+    instructionReady = false;
+    waitingForRestart = true;
+
+    hideLabels();
+    speech.style.opacity = "0";
+  }
+
+  function nearHome(x, y) {
+    const r = stageRect();
+    const radius = Math.max(38, Math.min(56, r.width * .06));
+    return Math.hypot(x - homeCenter.x, y - homeCenter.y) <= radius;
+  }
+
+  function positionChoiceLabel(el, cornerIndex, text) {
+    const c = corners()[cornerIndex];
+
+    el.textContent = text;
+    el.dataset.choice = text;
+    el.dataset.corner = String(cornerIndex);
+
+    // Text sits just inward from each corner.
+    const pad = 13;
+
+    if (cornerIndex === 0) {
+      el.style.left = (c.x + pad) + "px";
+      el.style.top = (c.y + pad) + "px";
+      el.style.transform = "none";
+    } else if (cornerIndex === 1) {
+      el.style.left = (c.x - pad) + "px";
+      el.style.top = (c.y + pad) + "px";
+      el.style.transform = "translateX(-100%)";
+    } else if (cornerIndex === 2) {
+      el.style.left = (c.x - pad) + "px";
+      el.style.top = (c.y - pad) + "px";
+      el.style.transform = "translate(-100%,-100%)";
+    } else {
+      el.style.left = (c.x + pad) + "px";
+      el.style.top = (c.y - pad) + "px";
+      el.style.transform = "translateY(-100%)";
+    }
+
+    el.classList.add("visible");
+  }
+
+  function showRepeatMenu(firstCorner) {
+    menuActive = true;
+    cornerPromptActive = false;
+    occupiedCorner = firstCorner;
+    speech.style.opacity = "1";
+
+    const clockwise = [0,1,2,3];
+    const startIndex = clockwise.indexOf(firstCorner);
+    const remaining = [];
+
+    for (let step=1; step<=3; step++) {
+      remaining.push(clockwise[(startIndex + step) % 4]);
+    }
+
+    const names = ["yes","no","maybe"];
+    choicesByCorner = {};
+
+    remaining.forEach((cornerIndex, i) => {
+      const name = names[i];
+      choicesByCorner[cornerIndex] = name;
+      positionChoiceLabel(labels[i], cornerIndex, name);
+    });
+  }
+
+  function activateMenu(firstCorner) {
+    menuActive = true;
+    cornerPromptActive = false;
+    occupiedCorner = firstCorner;
+    lastOccupiedCorner = firstCorner;
+
+    setSpeech("curious about human intelligence?");
+    speech.style.opacity = "1";
+
+    /*
+      Walk clockwise from the occupied corner.
+      The three remaining corners receive yes / no / maybe.
+    */
+    const clockwise = [0,1,2,3];
+    const startIndex = clockwise.indexOf(firstCorner);
+    const remaining = [];
+
+    for (let step=1; step<=3; step++) {
+      remaining.push(clockwise[(startIndex + step) % 4]);
+    }
+
+    const names = ["yes","no","maybe"];
+    choicesByCorner = {};
+
+    remaining.forEach((cornerIndex, i) => {
+      const name = names[i];
+      choicesByCorner[cornerIndex] = name;
+      positionChoiceLabel(labels[i], cornerIndex, name);
+    });
+  }
+
+  function begin(event) {
+    event.preventDefault();
+    pointerId = event.pointerId;
+    down = { x:event.clientX, y:event.clientY };
+    start = { ...center };
+    moved = false;
+
+    portal.classList.add("dragging");
+    portal.setPointerCapture(pointerId);
+  }
+
+  function move(event) {
+    if (event.pointerId !== pointerId) return;
+    event.preventDefault();
+
+    const dx = event.clientX - down.x;
+    const dy = event.clientY - down.y;
+
+    if (Math.hypot(dx,dy) > 4) {
+      if (!moved) {
+        moved = true;
+      }
+
+      if (cornerPromptActive) {
+        movedSinceCornerPrompt = true;
+      }
+    }
+
+    const r = stageRect();
+    const margin = 12;
+
+    const x = Math.max(margin, Math.min(r.width-margin, start.x + dx));
+    const y = Math.max(margin, Math.min(r.height-margin, start.y + dy));
+
+    setCenter(x,y);
+  }
+
+  function end(event) {
+    if (event.pointerId !== pointerId) return;
+    event.preventDefault();
+
+    try { portal.releasePointerCapture(pointerId); } catch (_) {}
+    pointerId = null;
+    portal.classList.remove("dragging");
+
+    /*
+      After the menu has appeared, bringing the ball back near its original
+      i-dot position resets the doorway. It does not need pixel-perfect alignment.
+    */
+    if (moved && menuActive && nearHome(center.x, center.y)) {
+      resetAtHome();
+      return;
+    }
+
+    /*
+      Once reset, a simple click on the ball begins the conversation again.
+    */
+    if (!moved) {
+      if (waitingForRestart) {
+        startConversation();
+      }
+      return;
+    }
+
+    const hit = nearestCorner(center.x, center.y);
+    if (!hit || hit.distance > snapThreshold()) return;
+
+    /*
+      Do NOT snap the ball to the corner.
+      Releasing near a corner is enough to trigger the next step / destination,
+      but the ball stays where the user left it.
+    */
+    if (!instructionReady) return;
+
+    if (!menuActive) {
+      activateMenu(hit.index);
+      return;
+    }
+
+    const choice = choicesByCorner[hit.index];
+    if (choice) {
+      window.location.href = destinations[choice];
+    }
+  }
+
+  portal.addEventListener("pointerdown", begin);
+  portal.addEventListener("pointermove", move);
+  portal.addEventListener("pointerup", end);
+  portal.addEventListener("pointercancel", () => {
+    pointerId = null;
+    portal.classList.remove("dragging");
+  });
+
+  // Initial visit starts automatically. After a reset, clicking the ball restarts it.
+  startConversation();
+
+  window.addEventListener("resize", () => {
+    if (!menuActive && !waitingForRestart && pointerId === null) {
+      initialCenter();
+    } else {
+      const sr = stageRect();
+      const lr = logo.getBoundingClientRect();
+
+      homeCenter = {
+        x: (lr.left - sr.left) + lr.width * logoDot.x,
+        y: (lr.top - sr.top) + lr.height * logoDot.y
+      };
+
+      setCenter(
+        Math.max(12, Math.min(sr.width-12, center.x)),
+        Math.max(12, Math.min(sr.height-12, center.y))
+      );
+
+      if (menuActive) {
+        const entries = Object.entries(choicesByCorner);
+        entries.forEach(([cornerIndex, choice], i) => {
+          positionChoiceLabel(labels[i], Number(cornerIndex), choice);
+        });
+      }
+    }
+  });
+
+  requestAnimationFrame(initialCenter);
+})();
+</script>
+</body>
+</html>
