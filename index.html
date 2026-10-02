@@ -30,7 +30,7 @@ body {
 }
 
 .doorway {
-  width:min(98vw, 1120px);
+  width:min(98vw, 1180px);
   text-align:center;
 }
 
@@ -46,7 +46,7 @@ body {
   position:absolute;
   left:50%;
   top:48%;
-  width:96%;
+  width:100%;
   transform:translate(-50%,-50%);
   pointer-events:none;
 }
@@ -80,11 +80,13 @@ body {
 
 /* Only this is visible; its size is set from logo width in JS. */
 .ball {
+  --ball-size:12px;
+  --ball-hop:6px;
   position:absolute;
   left:50%;
   top:50%;
-  width:12px;
-  height:12px;
+  width:var(--ball-size);
+  height:var(--ball-size);
   transform:translate(-50%,-50%);
   border-radius:50%;
   background:var(--accent);
@@ -97,22 +99,12 @@ body {
 }
 
 .ball.speaking {
-  animation:ball-say .46s ease-out 1;
+  animation:ball-say .38s cubic-bezier(.2,.75,.35,1) 1;
 }
 
 @keyframes ball-say {
-  0%, 100% {
-    transform:translate(-50%,-50%);
-  }
-  28% {
-    transform:translate(-50%,calc(-50% - 5px));
-  }
-  52% {
-    transform:translate(-50%,-50%);
-  }
-  72% {
-    transform:translate(-50%,calc(-50% - 2.5px));
-  }
+  0%,100% { transform:translate(-50%,-50%); }
+  45% { transform:translate(-50%,calc(-50% - var(--ball-hop))); }
 }
 
 .ball.nudge-up {
@@ -123,16 +115,33 @@ body {
   background:#ed6e2e !important;
 }
 
+.ball.orange-pulse {
+  animation:orange-blink .8s ease-in-out infinite;
+}
+
+@keyframes orange-blink {
+  0%,100% {
+    transform:translate(-50%,-50%) scale(var(--blink-min,.9));
+    background:#ed6e2e;
+  }
+  50% {
+    transform:translate(-50%,-50%) scale(var(--blink-max,1.1));
+    background:#f38e54;
+  }
+}
+
 @keyframes ball-bounce-up {
   0%,100% { transform:translate(-50%,-50%); }
-  45% { transform:translate(-50%,calc(-50% - 8px)); }
+  45% { transform:translate(-50%,calc(-50% - var(--ball-hop))); }
 }
 
 
 
 
 @media (prefers-reduced-motion: reduce) {
-  .ball.nudge-up {
+  .ball.speaking,
+  .ball.nudge-up,
+  .ball.orange-pulse {
     animation:none;
   }
 }
@@ -142,7 +151,7 @@ body {
   z-index:8;
   max-width:min(340px,78vw);
   color:#171512;
-  font:400 clamp(14px,1.25vw,16px)/1.34 ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font:400 clamp(15px,1.3vw,17px)/1.34 ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
   text-align:left;
   pointer-events:none;
   transition:opacity .18s ease;
@@ -151,7 +160,7 @@ body {
 .corner-label {
   position:absolute;
   color:var(--choice);
-  font:400 clamp(13px,1.1vw,15px)/1.24 ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font:400 clamp(14px,1.15vw,16px)/1.24 ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
   letter-spacing:.01em;
   pointer-events:none;
   opacity:0;
@@ -173,8 +182,8 @@ body {
 @media(max-width:640px) {
   .doorway { width:98vw; }
   .stage { min-height:230px; }
-  .speech { font-size:14px; }
-  .corner-label { font-size:13px; }
+  .speech { font-size:15px; }
+  .corner-label { font-size:14px; }
 }
 </style>
 </head>
@@ -227,6 +236,19 @@ body {
     maybe: "https://en.wikipedia.org/wiki/Human_intelligence"
   };
 
+  /*
+    Global geometry for the little ball.
+    Every ball-relative visual measurement derives from these values.
+  */
+  const BALL_LOGO_RATIO = 0.030685;
+  const BALL_HOME_SHIFT = 0.05;
+  const BALL_TEXT_SHIFT = 0.05;
+  const BALL_HOP_RATIO = 0.46;
+  const ORANGE_BLINK_MIN = 0.90;
+  const ORANGE_BLINK_MAX = 1.10;
+
+  let normalBallSize = 12;
+
   let center = { x:0, y:0 };
   let pointerId = null;
   let down = null;
@@ -247,6 +269,10 @@ body {
   let longWaitActive = false;
   let orangeForever = false;
   let ignoreTimer = null;
+  let orangePulseTimer = null;
+  let orangePulseFinishTimer = null;
+  let nudgeSpeechTimer = null;
+  let autonomyPaused = false;
 
   let conversationCount = 0;
   let dialogueStep = -1;
@@ -282,32 +308,61 @@ body {
     }
   }
 
-  function initialCenter() {
+  function ballSizeForLogoWidth(logoWidth) {
+    return logoWidth * BALL_LOGO_RATIO;
+  }
+
+  function logoHomeCenter() {
     const sr = stageRect();
     const lr = logo.getBoundingClientRect();
+    const size = ballSizeForLogoWidth(lr.width);
 
-    const x = (lr.left - sr.left) + lr.width * logoDot.x;
+    // Keep the earlier optical correction, then shift right by exactly
+    // 5% of the ball's own normal diameter.
+    const x = (lr.left - sr.left)
+      + lr.width * logoDot.x
+      - lr.width * .0035
+      + size * BALL_HOME_SHIFT;
+
     const y = (lr.top - sr.top) + lr.height * logoDot.y;
 
-    homeCenter = { x, y };
-    setCenter(x, y);
+    return { x, y };
+  }
 
-    /*
-      Visible ball scales with the actual logo width, rather than viewport.
-      It remains small visually; the 48px parent is the invisible hit area.
-    */
-    const visible = Math.max(13, Math.min(20, lr.width * .021));
-    ball.style.width = visible + "px";
-    ball.style.height = visible + "px";
+  function updateBallScale() {
+    const lr = logo.getBoundingClientRect();
+    normalBallSize = ballSizeForLogoWidth(lr.width);
+
+    ball.style.setProperty("--ball-size", normalBallSize + "px");
+    ball.style.setProperty("--ball-hop", (normalBallSize * BALL_HOP_RATIO) + "px");
+    ball.style.setProperty("--blink-min", String(ORANGE_BLINK_MIN));
+    ball.style.setProperty("--blink-max", String(ORANGE_BLINK_MAX));
+  }
+
+  function initialCenter() {
+    // Scale first so every dependent measurement already sees the final size.
+    updateBallScale();
+
+    const home = logoHomeCenter();
+    homeCenter = { ...home };
+    setCenter(home.x, home.y);
   }
 
   function placeSpeech() {
     const sr = stageRect();
     const sw = speech.offsetWidth || 150;
     const sh = speech.offsetHeight || 20;
+    const mobile = window.innerWidth <= 640;
 
-    let x = center.x - sw - 13;
-    let y = center.y - sh - 11;
+    // Extra vertical breathing room keeps a speaking hop away from the text.
+    const gapX = mobile ? 18 : 15;
+    const ballTextShift = normalBallSize * BALL_TEXT_SHIFT;
+    const gapY = mobile
+      ? Math.max(21, normalBallSize * 1.55)
+      : Math.max(15, normalBallSize * .9);
+
+    let x = center.x - sw - gapX - ballTextShift;
+    let y = center.y - sh - gapY;
 
     x = Math.max(8, Math.min(sr.width - sw - 8, x));
     y = Math.max(8, Math.min(sr.height - sh - 8, y));
@@ -316,11 +371,23 @@ body {
     speech.style.top = y + "px";
   }
 
-  function setSpeech(text) {
+  function setSpeech(text, bounce = true) {
     speech.textContent = text;
     speech.style.opacity = "1";
     requestAnimationFrame(placeSpeech);
+
+    if (bounce && pointerId === null) {
+      ball.classList.remove("speaking");
+      void ball.offsetWidth;
+      ball.classList.add("speaking");
+    }
   }
+
+  ball.addEventListener("animationend", (event) => {
+    if (event.animationName === "ball-say") {
+      ball.classList.remove("speaking");
+    }
+  });
 
   function clearNudgeMotion() {
     if (nudgeSwitchTimer) {
@@ -356,11 +423,55 @@ body {
     }
   }
 
+  function clearEscalationTimers() {
+    if (orangePulseTimer) {
+      clearTimeout(orangePulseTimer);
+      orangePulseTimer = null;
+    }
+    if (orangePulseFinishTimer) {
+      clearTimeout(orangePulseFinishTimer);
+      orangePulseFinishTimer = null;
+    }
+    if (nudgeSpeechTimer) {
+      clearTimeout(nudgeSpeechTimer);
+      nudgeSpeechTimer = null;
+    }
+  }
+
+  function settleOrangeBall() {
+    ball.classList.remove("orange-pulse", "speaking");
+    if (orangeForever) {
+      ball.style.background = "#ed6e2e";
+    }
+  }
+
+  function pauseBallChanges() {
+    if (!cornerPromptActive || menuActive) return;
+
+    autonomyPaused = true;
+    clearNudgeMotion();
+    clearIgnoreTimer();
+    clearEscalationTimers();
+
+    // Reminder lines use conversationTimers after the first line.
+    // Cancel them too, so a touch truly freezes the whole autonomous sequence.
+    clearDialogueTimersOnly();
+
+    settleOrangeBall();
+  }
+
   function stopWaitingBehavior({keepOrange = true} = {}) {
     clearNudgeMotion();
     clearIgnoreTimer();
+    clearEscalationTimers();
+
+    if (cornerPromptActive) {
+      clearDialogueTimersOnly();
+    }
+
     longWaitActive = false;
-    ball.classList.remove("waiting-long");
+    autonomyPaused = false;
+    ball.classList.remove("waiting-long", "orange-pulse", "speaking");
 
     if (keepOrange && orangeForever) {
       ball.style.background = "#ed6e2e";
@@ -369,24 +480,111 @@ body {
     }
   }
 
+  function scheduleReminderSpeech() {
+    nudgeSpeechTimer = setTimeout(() => {
+      if (
+        cornerPromptActive &&
+        !menuActive &&
+        pointerId === null &&
+        !autonomyPaused
+      ) {
+        setSpeech("just in case you forget.");
+
+        conversationTimers.push(setTimeout(() => {
+          if (
+            cornerPromptActive &&
+            !menuActive &&
+            pointerId === null &&
+            !autonomyPaused
+          ) {
+            setSpeech("i really like to be in the corners.");
+
+            conversationTimers.push(setTimeout(() => {
+              if (
+                cornerPromptActive &&
+                !menuActive &&
+                pointerId === null &&
+                !autonomyPaused
+              ) {
+                setSpeech("could you nudge me there?");
+              }
+            }, 4000));
+          }
+        }, 2000));
+      }
+    }, 0);
+  }
+
+  function runOrangePulse() {
+    if (
+      !cornerPromptActive ||
+      menuActive ||
+      pointerId !== null ||
+      autonomyPaused
+    ) {
+      return;
+    }
+
+    ball.classList.remove("orange-pulse");
+    void ball.offsetWidth;
+    ball.classList.add("orange-pulse");
+
+    // Five seconds of a quiet loading-like blink, then settle back to
+    // the normal orange size/color before speaking again.
+    orangePulseFinishTimer = setTimeout(() => {
+      if (autonomyPaused) return;
+
+      ball.classList.remove("orange-pulse");
+      ball.style.background = "#ed6e2e";
+      scheduleReminderSpeech();
+    }, 5000);
+  }
+
   function beginLongWait() {
     clearNudgeMotion();
     clearIgnoreTimer();
+    clearEscalationTimers();
+
     longWaitActive = true;
     orangeForever = true;
+    autonomyPaused = false;
     ball.classList.add("waiting-long");
     ball.style.background = "#ed6e2e";
 
-    // After being ignored, the ball stops moving and stops talking.
+    // The ball gives up talking for a while.
     speech.style.opacity = "0";
+
+    // Ten seconds later it begins a five-second loading-like blink.
+    orangePulseTimer = setTimeout(() => {
+      runOrangePulse();
+    }, 10000);
   }
 
   function beginWaitingBehavior() {
     clearIgnoreTimer();
-    startNudgeSequence();
+    clearEscalationTimers();
+    autonomyPaused = false;
+    longWaitActive = false;
+
+    // Let the speaking hop finish before the impatient hops begin.
+    nudgeSwitchTimer = setTimeout(() => {
+      if (
+        cornerPromptActive &&
+        !menuActive &&
+        pointerId === null &&
+        !autonomyPaused
+      ) {
+        startNudgeSequence();
+      }
+    }, 520);
 
     ignoreTimer = setTimeout(() => {
-      if (cornerPromptActive && !menuActive && pointerId === null) {
+      if (
+        cornerPromptActive &&
+        !menuActive &&
+        pointerId === null &&
+        !autonomyPaused
+      ) {
         beginLongWait();
       }
     }, 10000);
@@ -433,7 +631,7 @@ body {
   const firstDialogue = [
     { text:"hi!", wait:2000 },
     { text:"i love the corners.", wait:3000 },
-    { text:"very cozy!", wait:4000 },
+    { text:"corners are very cozy!", wait:4000 },
     { text:"could you take me there?", wait:null }
   ];
 
@@ -456,7 +654,10 @@ body {
     dialogueStep = Math.max(0, Math.min(index, firstDialogue.length - 1));
 
     const item = firstDialogue[dialogueStep];
-    setSpeech(item.text);
+
+    // The very first "hi!" stays still; after that, speech has a little hop.
+    const isVeryFirstHi = conversationCount === 1 && dialogueStep === 0;
+    setSpeech(item.text, !isVeryFirstHi);
 
     if (dialogueStep === firstDialogue.length - 1) {
       finishFirstDialogue();
@@ -473,7 +674,7 @@ body {
     dialogueStep = Math.max(0, Math.min(index, returnDialogue.length - 1));
 
     const item = returnDialogue[dialogueStep];
-    setSpeech(item.text);
+    setSpeech(item.text, true);
 
     if (dialogueStep === returnDialogue.length - 1) {
       instructionReady = true;
@@ -661,6 +862,12 @@ body {
   function begin(event) {
     event.preventDefault();
 
+    // During the autonomous waiting/escalation sequence, touching the ball
+    // immediately gives control back to the visitor and freezes that sequence.
+    if (cornerPromptActive && !menuActive) {
+      pauseBallChanges();
+    }
+
     pointerId = event.pointerId;
     down = { x:event.clientX, y:event.clientY };
     start = { ...center };
@@ -728,17 +935,14 @@ body {
       } else if (!menuActive && !instructionReady) {
         advanceDialogueByClick();
       } else if (cornerPromptActive && !menuActive) {
-        // A tap while the ball is waiting simply lets it resume hopping.
-        beginWaitingBehavior();
+        // Touching the waiting ball pauses its autonomous behavior.
+        pauseBallChanges();
       }
       return;
     }
 
     const hit = nearestCorner(center.x, center.y);
     if (!hit || hit.distance > snapThreshold()) {
-      if (cornerPromptActive && !menuActive) {
-        beginWaitingBehavior();
-      }
       return;
     }
 
@@ -768,6 +972,9 @@ body {
   portal.addEventListener("pointermove", move);
   portal.addEventListener("pointerup", end);
   portal.addEventListener("pointercancel", () => {
+    if (cornerPromptActive && !menuActive) {
+      pauseBallChanges();
+    }
     pointerId = null;
     portal.classList.remove("dragging");
   });
@@ -780,12 +987,9 @@ body {
       initialCenter();
     } else {
       const sr = stageRect();
-      const lr = logo.getBoundingClientRect();
 
-      homeCenter = {
-        x: (lr.left - sr.left) + lr.width * logoDot.x,
-        y: (lr.top - sr.top) + lr.height * logoDot.y
-      };
+      updateBallScale();
+      homeCenter = logoHomeCenter();
 
       setCenter(
         Math.max(12, Math.min(sr.width-12, center.x)),
