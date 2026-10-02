@@ -30,7 +30,7 @@ body {
 }
 
 .doorway {
-  width:min(92vw, 920px);
+  width:min(98vw, 1120px);
   text-align:center;
 }
 
@@ -38,15 +38,15 @@ body {
   position:relative;
   width:100%;
   aspect-ratio: 3.1 / 1;
-  min-height:220px;
-  max-height:320px;
+  min-height:240px;
+  max-height:360px;
 }
 
 .logo {
   position:absolute;
   left:50%;
   top:48%;
-  width:82%;
+  width:96%;
   transform:translate(-50%,-50%);
   pointer-events:none;
 }
@@ -61,9 +61,9 @@ body {
 /* A large invisible draggable target. */
 .portal {
   position:absolute;
-  width:48px;
-  height:48px;
-  margin:-24px 0 0 -24px;
+  width:54px;
+  height:54px;
+  margin:-27px 0 0 -27px;
   border:0;
   padding:0;
   background:transparent;
@@ -96,12 +96,53 @@ body {
   box-shadow:0 4px 10px rgba(143,63,176,.22);
 }
 
+.ball.speaking {
+  animation:ball-say .46s ease-out 1;
+}
+
+@keyframes ball-say {
+  0%, 100% {
+    transform:translate(-50%,-50%);
+  }
+  28% {
+    transform:translate(-50%,calc(-50% - 5px));
+  }
+  52% {
+    transform:translate(-50%,-50%);
+  }
+  72% {
+    transform:translate(-50%,calc(-50% - 2.5px));
+  }
+}
+
+.ball.nudge-up {
+  animation:ball-bounce-up .38s cubic-bezier(.2,.75,.35,1) 1;
+}
+
+.ball.waiting-long {
+  background:#ed6e2e !important;
+}
+
+@keyframes ball-bounce-up {
+  0%,100% { transform:translate(-50%,-50%); }
+  45% { transform:translate(-50%,calc(-50% - 8px)); }
+}
+
+
+
+
+@media (prefers-reduced-motion: reduce) {
+  .ball.nudge-up {
+    animation:none;
+  }
+}
+
 .speech {
   position:absolute;
   z-index:8;
-  max-width:min(270px,70vw);
+  max-width:min(340px,78vw);
   color:#171512;
-  font:400 14px/1.35 ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font:400 clamp(14px,1.25vw,16px)/1.34 ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
   text-align:left;
   pointer-events:none;
   transition:opacity .18s ease;
@@ -110,7 +151,7 @@ body {
 .corner-label {
   position:absolute;
   color:var(--choice);
-  font:400 14px/1.2 ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font:400 clamp(13px,1.1vw,15px)/1.24 ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
   letter-spacing:.01em;
   pointer-events:none;
   opacity:0;
@@ -130,9 +171,9 @@ body {
 }
 
 @media(max-width:640px) {
-  .doorway { width:96vw; }
-  .stage { min-height:210px; }
-  .speech { font-size:13px; }
+  .doorway { width:98vw; }
+  .stage { min-height:230px; }
+  .speech { font-size:14px; }
   .corner-label { font-size:13px; }
 }
 </style>
@@ -148,7 +189,7 @@ body {
       </svg>
     </div>
 
-    <div class="speech" id="speech" aria-live="polite">hi!</div>
+    <div class="speech" id="speech" aria-live="polite"></div>
 
     <button class="portal" id="portal" type="button" aria-label="Move the dot">
       <span class="ball" id="ball" aria-hidden="true"></span>
@@ -202,7 +243,13 @@ body {
   let cornerPromptActive = false;
   let movedSinceCornerPrompt = false;
 
+  let nudgeSwitchTimer = null;
+  let longWaitActive = false;
+  let orangeForever = false;
+  let ignoreTimer = null;
+
   let conversationCount = 0;
+  let dialogueStep = -1;
   let lastOccupiedCorner = 0;
 
   function stageRect() {
@@ -249,7 +296,7 @@ body {
       Visible ball scales with the actual logo width, rather than viewport.
       It remains small visually; the 48px parent is the invisible hit area.
     */
-    const visible = Math.max(10, Math.min(16, lr.width * .019));
+    const visible = Math.max(13, Math.min(20, lr.width * .021));
     ball.style.width = visible + "px";
     ball.style.height = visible + "px";
   }
@@ -271,7 +318,78 @@ body {
 
   function setSpeech(text) {
     speech.textContent = text;
+    speech.style.opacity = "1";
     requestAnimationFrame(placeSpeech);
+  }
+
+  function clearNudgeMotion() {
+    if (nudgeSwitchTimer) {
+      clearTimeout(nudgeSwitchTimer);
+      nudgeSwitchTimer = null;
+    }
+    ball.classList.remove("nudge-up");
+  }
+
+  function startNudgeSequence() {
+    clearNudgeMotion();
+
+    const hop = () => {
+      if (!cornerPromptActive || menuActive || longWaitActive || pointerId !== null) {
+        return;
+      }
+
+      ball.classList.remove("nudge-up");
+      void ball.offsetWidth;
+      ball.classList.add("nudge-up");
+
+      // One hop, then a short impatient pause.
+      nudgeSwitchTimer = setTimeout(hop, 720);
+    };
+
+    hop();
+  }
+
+  function clearIgnoreTimer() {
+    if (ignoreTimer) {
+      clearTimeout(ignoreTimer);
+      ignoreTimer = null;
+    }
+  }
+
+  function stopWaitingBehavior({keepOrange = true} = {}) {
+    clearNudgeMotion();
+    clearIgnoreTimer();
+    longWaitActive = false;
+    ball.classList.remove("waiting-long");
+
+    if (keepOrange && orangeForever) {
+      ball.style.background = "#ed6e2e";
+    } else if (!orangeForever) {
+      ball.style.background = "";
+    }
+  }
+
+  function beginLongWait() {
+    clearNudgeMotion();
+    clearIgnoreTimer();
+    longWaitActive = true;
+    orangeForever = true;
+    ball.classList.add("waiting-long");
+    ball.style.background = "#ed6e2e";
+
+    // After being ignored, the ball stops moving and stops talking.
+    speech.style.opacity = "0";
+  }
+
+  function beginWaitingBehavior() {
+    clearIgnoreTimer();
+    startNudgeSequence();
+
+    ignoreTimer = setTimeout(() => {
+      if (cornerPromptActive && !menuActive && pointerId === null) {
+        beginLongWait();
+      }
+    }, 10000);
   }
 
   function nearestCorner(x, y) {
@@ -300,59 +418,130 @@ body {
     });
   }
 
-  function clearConversationTimers() {
+  function clearDialogueTimersOnly() {
     conversationTimers.forEach(id => clearTimeout(id));
     conversationTimers = [];
+  }
+
+  function clearConversationTimers() {
+    clearDialogueTimersOnly();
     cornerPromptActive = false;
+    movedSinceCornerPrompt = false;
+    dialogueStep = -1;
+  }
+
+  const firstDialogue = [
+    { text:"hi!", wait:2000 },
+    { text:"i love the corners.", wait:3000 },
+    { text:"very cozy!", wait:4000 },
+    { text:"could you take me there?", wait:null }
+  ];
+
+  const returnDialogue = [
+    { text:"hi!", wait:2000 },
+    { text:"welcome back.", wait:2000 },
+    { text:"still curious about human intelligence?", wait:null }
+  ];
+
+  function finishFirstDialogue() {
+    clearDialogueTimersOnly();
+    instructionReady = true;
+    cornerPromptActive = true;
+    movedSinceCornerPrompt = false;
+    beginWaitingBehavior();
+  }
+
+  function showFirstDialogueStep(index) {
+    clearDialogueTimersOnly();
+    dialogueStep = Math.max(0, Math.min(index, firstDialogue.length - 1));
+
+    const item = firstDialogue[dialogueStep];
+    setSpeech(item.text);
+
+    if (dialogueStep === firstDialogue.length - 1) {
+      finishFirstDialogue();
+      return;
+    }
+
+    conversationTimers.push(setTimeout(() => {
+      showFirstDialogueStep(dialogueStep + 1);
+    }, item.wait));
+  }
+
+  function showReturnDialogueStep(index) {
+    clearDialogueTimersOnly();
+    dialogueStep = Math.max(0, Math.min(index, returnDialogue.length - 1));
+
+    const item = returnDialogue[dialogueStep];
+    setSpeech(item.text);
+
+    if (dialogueStep === returnDialogue.length - 1) {
+      instructionReady = true;
+      showRepeatMenu();
+      return;
+    }
+
+    conversationTimers.push(setTimeout(() => {
+      showReturnDialogueStep(dialogueStep + 1);
+    }, item.wait));
+  }
+
+  function advanceDialogueByClick() {
+    if (menuActive || instructionReady) return;
+
+    if (conversationCount === 1) {
+      // A click during the initial two-second silence reveals "hi!" immediately.
+      if (dialogueStep < 0) {
+        showFirstDialogueStep(0);
+      } else {
+        showFirstDialogueStep(dialogueStep + 1);
+      }
+    } else {
+      if (dialogueStep < 0) {
+        showReturnDialogueStep(0);
+      } else {
+        showReturnDialogueStep(dialogueStep + 1);
+      }
+    }
+  }
+
+  function interruptFirstDialogueForDrag() {
+    if (conversationCount !== 1 || instructionReady || menuActive || waitingForRestart) {
+      return;
+    }
+
+    clearDialogueTimersOnly();
+    dialogueStep = firstDialogue.length - 1;
+    setSpeech("take me to a corner.");
+    instructionReady = true;
+    cornerPromptActive = true;
     movedSinceCornerPrompt = false;
   }
 
   function startConversation() {
+    stopWaitingBehavior({keepOrange:true});
     clearConversationTimers();
 
     waitingForRestart = false;
     instructionReady = false;
-    speech.style.opacity = "1";
+    speech.textContent = "";
+    speech.style.opacity = "0";
     conversationCount += 1;
-
-    setSpeech("hi!");
+    dialogueStep = -1;
 
     if (conversationCount === 1) {
-      /*
-        First visit: teach the corner behavior.
-      */
+      // First impression: two quiet seconds before the ball says hello.
       conversationTimers.push(setTimeout(() => {
-        setSpeech("i love the corners.");
-
-        conversationTimers.push(setTimeout(() => {
-          setSpeech("they're very cozy!");
-
-          conversationTimers.push(setTimeout(() => {
-            setSpeech("could you bring me there?");
-            instructionReady = true;
-            cornerPromptActive = true;
-            movedSinceCornerPrompt = false;
-          }, 4000));
-        }, 3000));
+        showFirstDialogueStep(0);
       }, 2000));
-
     } else {
-      /*
-        Returning visits: acknowledge the return, then ask again.
-      */
-      conversationTimers.push(setTimeout(() => {
-        setSpeech("welcome back.");
-
-        conversationTimers.push(setTimeout(() => {
-          setSpeech("still curious about human intelligence?");
-          instructionReady = true;
-          showRepeatMenu();
-        }, 2000));
-      }, 2000));
+      // On return, the user's click already initiated the exchange.
+      showReturnDialogueStep(0);
     }
   }
 
   function resetAtHome() {
+    stopWaitingBehavior({keepOrange:true});
     clearConversationTimers();
 
     menuActive = false;
@@ -405,6 +594,7 @@ body {
   }
 
   function showRepeatMenu() {
+    stopWaitingBehavior({keepOrange:true});
     /*
       Recompute the ball's position relative to the invisible box NOW.
       The nearest corner is treated as the ball's current corner, and the
@@ -437,6 +627,7 @@ body {
   }
 
   function activateMenu(firstCorner) {
+    stopWaitingBehavior({keepOrange:true});
     menuActive = true;
     cornerPromptActive = false;
     occupiedCorner = firstCorner;
@@ -469,6 +660,7 @@ body {
 
   function begin(event) {
     event.preventDefault();
+
     pointerId = event.pointerId;
     down = { x:event.clientX, y:event.clientY };
     start = { ...center };
@@ -488,6 +680,12 @@ body {
     if (Math.hypot(dx,dy) > 4) {
       if (!moved) {
         moved = true;
+        clearNudgeMotion();
+        clearIgnoreTimer();
+
+        if (!instructionReady && !menuActive) {
+          interruptFirstDialogueForDrag();
+        }
       }
 
       if (cornerPromptActive) {
@@ -527,12 +725,22 @@ body {
     if (!moved) {
       if (waitingForRestart) {
         startConversation();
+      } else if (!menuActive && !instructionReady) {
+        advanceDialogueByClick();
+      } else if (cornerPromptActive && !menuActive) {
+        // A tap while the ball is waiting simply lets it resume hopping.
+        beginWaitingBehavior();
       }
       return;
     }
 
     const hit = nearestCorner(center.x, center.y);
-    if (!hit || hit.distance > snapThreshold()) return;
+    if (!hit || hit.distance > snapThreshold()) {
+      if (cornerPromptActive && !menuActive) {
+        beginWaitingBehavior();
+      }
+      return;
+    }
 
     /*
       Do NOT snap the ball to the corner.
@@ -542,6 +750,10 @@ body {
     if (!instructionReady) return;
 
     if (!menuActive) {
+      ball.classList.remove("waiting-long", "nudge-up");
+      if (orangeForever) {
+        ball.style.background = "#ed6e2e";
+      }
       activateMenu(hit.index);
       return;
     }
